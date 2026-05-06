@@ -14,7 +14,6 @@ jobs:
     services:
       mdlr-server:
         image: retakenroots/mdlr:latest
-        # Internal port is 443
         ports:
           - 8443:443
         volumes:
@@ -29,20 +28,21 @@ jobs:
 
       - name: Execute Build
         run: |
-          # We use the service alias 'mdlr-server' instead of localhost.
-          # We wait up to 30s for the server to actually start responding.
+          # We use the service name 'mdlr-server' as the hostname.
+          # GitHub Actions links these automatically.
           
-          echo "Waiting for mdlr-server to respond..."
-          timeout 30s bash -c 'until curl --insecure -s -f https://mdlr-server/ > /dev/null; do sleep 2; done' || true
+          echo "Waiting for mdlr-server to wake up..."
+          # This loop checks the health of the service before we try to pull the bundle
+          timeout 60s bash -c 'until curl --insecure -s -f https://mdlr-server/ > /dev/null; do echo "Still waiting..."; sleep 2; done'
           
-          # Run the command directly
+          echo "Downloading and unzipping bundle..."
           curl --insecure -s "https://mdlr-server/bundle/unit/enge:psx:webgl" | gunzip > docs/index.js
           
-          # Verify the file was created and isn't empty
+          # Final sanity check: make sure the file actually has content
           if [ -s docs/index.js ]; then
-            echo "Build successful: docs/index.js created."
+            echo "Success! docs/index.js created."
           else
-            echo "Error: docs/index.js is empty or was not created."
+            echo "Error: docs/index.js is empty. Check server logs."
             exit 1
           fi
 
