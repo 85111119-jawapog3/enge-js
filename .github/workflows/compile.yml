@@ -5,21 +5,25 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch: # Allows you to run this manually
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    # This starts the "mdlr" server exactly like your docker-compose does
     services:
       mdlr-server:
         image: retakenroots/mdlr:latest
         ports:
           - 8443:443
-        # We mount the 'user' folder into the container so it can see the source
         volumes:
           - ${{ github.workspace }}/user:/app/user
+        # The health check ensures the container is ready before the job starts
+        options: >-
+          --health-cmd "curl -k -f https://localhost/ || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout Code
@@ -30,16 +34,17 @@ jobs:
 
       - name: Execute Build Script
         run: |
-          # Make sure the script is executable
+          # 1. Make the script executable
           chmod +x build.sh
-         
-          # We must tell curl to talk to localhost:8443 because of the service mapping
-          # If your build.sh has 'localhost' hardcoded without the port, we override it here:
-          sed -i 's/localhost/localhost:8443/g' build.sh
-         
+          
+          # 2. Update localhost to use the mapped port 8443. 
+          # Using a more robust regex to avoid double-port issues (e.g., localhost:443:8443)
+          sed -i 's/localhost\(:[0-9]\+\)\?/localhost:8443/g' build.sh
+          
+          # 3. Run the build
           ./build.sh
         env:
-          # Optional: bypass SSL certificate checks if curl complains
+          # Bypass SSL certificate checks for the local service
           CURL_FLAGS: "--insecure"
 
       - name: Upload Build Artifact
