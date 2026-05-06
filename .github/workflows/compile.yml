@@ -1,0 +1,49 @@
+name: Build PSX Emulator
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # Allows you to run this manually
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # This starts the "mdlr" server exactly like your docker-compose does
+    services:
+      mdlr-server:
+        image: retakenroots/mdlr:latest
+        ports:
+          - 8443:443
+        # We mount the 'user' folder into the container so it can see the source
+        volumes:
+          - ${{ github.workspace }}/user:/app/user
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Prepare Directories
+        run: mkdir -p docs
+
+      - name: Execute Build Script
+        run: |
+          # Make sure the script is executable
+          chmod +x build.sh
+         
+          # We must tell curl to talk to localhost:8443 because of the service mapping
+          # If your build.sh has 'localhost' hardcoded without the port, we override it here:
+          sed -i 's/localhost/localhost:8443/g' build.sh
+         
+          ./build.sh
+        env:
+          # Optional: bypass SSL certificate checks if curl complains
+          CURL_FLAGS: "--insecure"
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: psx-bundle
+          path: docs/index.js
