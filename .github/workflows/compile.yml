@@ -18,12 +18,6 @@ jobs:
           - 8443:443
         volumes:
           - ${{ github.workspace }}/user:/app/user
-        # The health check ensures the container is ready before the job starts
-        options: >-
-          --health-cmd "curl -k -f https://localhost/ || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout Code
@@ -34,17 +28,20 @@ jobs:
 
       - name: Execute Build Script
         run: |
-          # 1. Make the script executable
+          # 1. Make script executable
           chmod +x build.sh
           
-          # 2. Update localhost to use the mapped port 8443. 
-          # Using a more robust regex to avoid double-port issues (e.g., localhost:443:8443)
+          # 2. Update localhost to use the mapped port 8443
           sed -i 's/localhost\(:[0-9]\+\)\?/localhost:8443/g' build.sh
           
-          # 3. Run the build
+          # 3. Wait for the server to be ready manually 
+          # This loops until the port is open or 30 seconds pass
+          echo "Waiting for mdlr-server on port 8443..."
+          timeout 30s bash -c 'until printf "" 2>>/dev/null >>/dev/dev/tcp/127.0.0.1/8443; do sleep 2; done' || true
+          
+          # 4. Run the build
           ./build.sh
         env:
-          # Bypass SSL certificate checks for the local service
           CURL_FLAGS: "--insecure"
 
       - name: Upload Build Artifact
