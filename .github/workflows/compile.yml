@@ -14,8 +14,10 @@ jobs:
     services:
       mdlr-server:
         image: retakenroots/mdlr:latest
+        # Map both common ports just in case
         ports:
           - 8443:443
+          - 8080:80
         volumes:
           - ${{ github.workspace }}/user:/app/user
 
@@ -28,21 +30,26 @@ jobs:
 
       - name: Execute Build
         run: |
-          # We use the service name 'mdlr-server' as the hostname.
-          # GitHub Actions links these automatically.
+          # We check port 80 (http) and 443 (https)
+          echo "Probing mdlr-server..."
           
-          echo "Waiting for mdlr-server to wake up..."
-          # This loop checks the health of the service before we try to pull the bundle
-          timeout 60s bash -c 'until curl --insecure -s -f https://mdlr-server/ > /dev/null; do echo "Still waiting..."; sleep 2; done'
+          # Try to find which port is active
+          timeout 60s bash -c '
+          until curl -s -f http://mdlr-server/ > /dev/null || curl --insecure -s -f https://mdlr-server/ > /dev/null; do
+            echo "Waiting for server to bind to a port..."
+            sleep 2
+          done'
+
+          echo "Server is up! Attempting bundle download..."
           
-          echo "Downloading and unzipping bundle..."
-          curl --insecure -s "https://mdlr-server/bundle/unit/enge:psx:webgl" | gunzip > docs/index.js
-          
-          # Final sanity check: make sure the file actually has content
+          # Attempt download. We try HTTP first, then HTTPS if that fails.
+          curl -s -f "http://mdlr-server/bundle/unit/enge:psx:webgl" | gunzip > docs/index.js || \
+          curl --insecure -s -f "https://mdlr-server/bundle/unit/enge:psx:webgl" | gunzip > docs/index.js
+
           if [ -s docs/index.js ]; then
-            echo "Success! docs/index.js created."
+            echo "Success: docs/index.js created."
           else
-            echo "Error: docs/index.js is empty. Check server logs."
+            echo "Error: Download failed or file is empty."
             exit 1
           fi
 
